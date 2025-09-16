@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import apiUrls from '../apiurls'
 
 interface PlaylistInfo {
   isPlaylist: boolean
@@ -45,7 +46,7 @@ function MediaConverter() {
     if (!urlValue.trim()) return
 
     try {
-      const response = await axios.post('http://localhost:5000/api/playlist-info', {
+      const response = await axios.post(apiUrls.playlistinfo.value, {
         url: urlValue.trim()
       })
       setPlaylistInfo(response.data)
@@ -87,7 +88,7 @@ function MediaConverter() {
         }
       }
 
-      const response = await axios.post('http://localhost:5000/api/convert-media', formData, {
+      const response = await axios.post(apiUrls.media.convert, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         responseType: 'blob',
         onUploadProgress: (progressEvent) => {

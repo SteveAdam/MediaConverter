@@ -1,0 +1,110 @@
+import path from 'path'
+import { config } from '../config/index.js'
+import { processFileUpload, processYouTubeUrl } from '../services/mediaService.js'
+import { getPlaylistInfo as getPlaylistInfoService, isPlaylist } from '../services/youtubeService.js'
+import { createZipFile } from '../services/fileService.js'
+import { cleanupFiles } from '../utils/cleanup.js'
+
+export const convertMedia = async (req, res) => {
+  console.log('=== Enhanced Media Conversion Request ===')
+  console.log('Body:', req.body)
+  console.log('File:', req.file ? req.file.originalname : 'None')
+
+  const { url, format, resolution, quality = config.defaultVideoQuality, downloadPlaylist = false } = req.body
+  let inputPath = null
+  let outputPaths = []
+
+  try {
+    const timestamp = Date.now()
+
+    if (req.file) {
+      // Handle file upload conversion
+      console.log('Processing uploaded file with enhanced quality...')
+      inputPath = req.file.path
+      const outputPath = await processFileUpload(inputPath, format, resolution, quality, timestamp)
+      outputPaths.push(outputPath)
+    } else if (url) {
+      // Handle YouTube URL download
+      console.log('Processing YouTube URL:', url)
+      outputPaths = await processYouTubeUrl(url, format, resolution, quality, downloadPlaylist, timestamp)
+    } else {
+      return res.status(400).json({
+        error: 'Missing input',
+        message: 'Either provide a file upload or YouTube URL'
+      })
+    }
+
+    // Handle response based on number of files
+    if (outputPaths.length === 1) {
+      // Single file download
+      const outputPath = outputPaths[0]
+      res.download(outputPath, `converted.${format}`, async (err) => {
+        if (err) console.error('Download error:', err)
+        const filesToClean = [inputPath, ...outputPaths].filter(Boolean)
+        await cleanupFiles(filesToClean)
+      })
+    } else {
+      // Multiple files - create ZIP
+      const zipPath = await createZipFile(outputPaths, `converted-media-${timestamp}`, config.directories.downloads)
+      
+      res.download(zipPath, 'converted-media.zip', async (err) => {
+        if (err) console.error('Download error:', err)
+        const allFiles = [inputPath, ...outputPaths, zipPath].filter(Boolean)
+        await cleanupFiles(allFiles)
+      })
+    }
+
+  } catch (error) {
+    console.error('Media conversion error:', error)
+
+    // Cleanup on error
+    const filesToClean = [inputPath, ...outputPaths].filter(Boolean)
+    await cleanupFiles(filesToClean)
+
+    res.status(500).json({
+      error: 'Conversion failed',
+      message: error.message,
+      details: config.nodeEnv === 'development' ? error.stack : undefined
+    })
+  }
+}
+
+export const getPlaylistInfo = async (req, res) => {
+  const { url } = req.body
+
+  if (!url) {
+    return res.status(400).json({
+      error: 'URL required',
+      message: 'Please provide a YouTube URL'
+    })
+  }
+
+  try {
+    if (!isPlaylist(url)) {
+      return res.json({
+        isPlaylist: false,
+        videoCount: 1,
+        message: 'This is a single video, not a playlist'
+      })
+    }
+
+    const playlistInfo = await getPlaylistInfoService(url)
+
+    res.json({
+      isPlaylist: true,
+      videoCount: playlistInfo.length,
+      title: playlistInfo[0]?.playlist_title || 'Unknown Playlist',
+      videos: playlistInfo.slice(0, 5).map(video => ({
+        title: video.title,
+        duration: video.duration,
+        uploader: video.uploader
+      }))
+    })
+  } catch (error) {
+    console.error('Playlist info error:', error)
+    res.status(500).json({
+      error: 'Failed to get playlist info',
+      message: error.message
+    })
+  }
+}

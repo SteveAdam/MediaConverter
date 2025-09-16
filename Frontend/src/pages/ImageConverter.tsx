@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
+import apiUrls from '../apiurls'
 
 function ImageConverter() {
     const [files, setFiles] = useState<File[]>([])
@@ -46,7 +47,7 @@ function ImageConverter() {
             setIsLoading(true)
             setProgress(`Converting ${files.length} image(s) to ${format.toUpperCase()}...`)
 
-            const response = await axios.post('http://localhost:5000/api/convert-images', formData, {
+            const response = await axios.post(apiUrls.images.convert, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
                 responseType: 'blob',
                 onUploadProgress: (progressEvent) => {

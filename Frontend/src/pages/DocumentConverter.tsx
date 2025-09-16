@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
+import apiUrls from '../apiurls'
 
 function DocumentConverter() {
   const [files, setFiles] = useState<File[]>([])
@@ -30,7 +31,7 @@ function DocumentConverter() {
       setIsLoading(true)
       setProgress(`Converting ${files.length} document(s)...`)
 
-      const response = await axios.post('http://localhost:5000/api/convert-documents', formData, {
+      const response = await axios.post(apiUrls.document.convert, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         responseType: 'blob',
         onUploadProgress: (progressEvent) => {
