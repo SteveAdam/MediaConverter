@@ -1,16 +1,24 @@
 import path from 'path'
 import { config } from '../config/index.js'
-import { processFileUpload, processYouTubeUrl } from '../services/mediaService.js'
+import { processFileUpload, processYouTubeUrl} from '../services/mediaService.js'
 import { getPlaylistInfo as getPlaylistInfoService, isPlaylist } from '../services/youtubeService.js'
 import { createZipFile } from '../services/fileService.js'
 import { cleanupFiles } from '../utils/cleanup.js'
+
+// Helper function to sanitize filenames for safe download
+const sanitizeFilename = (filename) => {
+  return filename.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').substring(0, 100)
+}
 
 export const convertMedia = async (req, res) => {
   console.log('=== Enhanced Media Conversion Request ===')
   console.log('Body:', req.body)
   console.log('File:', req.file ? req.file.originalname : 'None')
 
-  const { url, format, resolution, quality = config.defaultVideoQuality, downloadPlaylist = false } = req.body
+  const { url, format, resolution, quality = config.defaultVideoQuality, downloadPlaylist } = req.body
+
+  // Convert string 'false'/'true' to boolean
+  const shouldDownloadPlaylist = downloadPlaylist === 'true' || downloadPlaylist === true
   let inputPath = null
   let outputPaths = []
 
@@ -21,12 +29,12 @@ export const convertMedia = async (req, res) => {
       // Handle file upload conversion
       console.log('Processing uploaded file with enhanced quality...')
       inputPath = req.file.path
-      const outputPath = await processFileUpload(inputPath, format, resolution, quality, timestamp)
+      const outputPath = await processFileUpload(inputPath, format, resolution, quality, req.file.originalname || 'file')
       outputPaths.push(outputPath)
     } else if (url) {
       // Handle YouTube URL download
       console.log('Processing YouTube URL:', url)
-      outputPaths = await processYouTubeUrl(url, format, resolution, quality, downloadPlaylist, timestamp)
+      outputPaths = await processYouTubeUrl(url, format, resolution, quality, shouldDownloadPlaylist, timestamp)
     } else {
       return res.status(400).json({
         error: 'Missing input',
@@ -38,7 +46,21 @@ export const convertMedia = async (req, res) => {
     if (outputPaths.length === 1) {
       // Single file download
       const outputPath = outputPaths[0]
-      res.download(outputPath, `converted.${format}`, async (err) => {
+      const basename = path.basename(outputPath)
+
+      // Strip yt_timestamp_ prefix from download name
+      let downloadName = basename
+      const youtubeMatch = basename.match(/^yt_\d+_(.+)\.(mp3|mp4)$/)
+      if (youtubeMatch) {
+        downloadName = `${youtubeMatch[1]}.${youtubeMatch[2]}`
+      }
+
+      // For non-YouTube files, keep original name but sanitize
+      if (!youtubeMatch) {
+        downloadName = basename
+      }
+
+      res.download(outputPath, downloadName, async (err) => {
         if (err) console.error('Download error:', err)
         const filesToClean = [inputPath, ...outputPaths].filter(Boolean)
         await cleanupFiles(filesToClean)

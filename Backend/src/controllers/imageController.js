@@ -1,3 +1,4 @@
+import path from 'path'
 import { config } from '../config/index.js'
 import { processImageConversion } from '../services/imageService.js'
 import { createZipFile } from '../services/fileService.js'
@@ -10,7 +11,10 @@ export const convertImages = async (req, res) => {
   console.log('Files:', req.files ? req.files.length : 0)
 
   const files = req.files || []
-  const { format, quality = config.defaultImageQuality, resize, width, height, maintainAspect = true } = req.body
+  const { format, quality = config.defaultImageQuality, resize, width, height, maintainAspect } = req.body
+
+  // Convert string 'false'/'true' to boolean
+  const shouldMaintainAspect = maintainAspect === 'false' || maintainAspect === false ? false : true
   let outputPaths = []
 
   try {
@@ -43,7 +47,7 @@ export const convertImages = async (req, res) => {
         resize,
         width,
         height,
-        maintainAspect,
+        maintainAspect: shouldMaintainAspect,
         timestamp
       })
 

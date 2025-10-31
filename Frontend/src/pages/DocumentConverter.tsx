@@ -44,16 +44,35 @@ function DocumentConverter() {
 
       setProgress('Preparing download...')
 
+      // Get filename from Content-Disposition header
+      const contentDisposition = response.headers['content-disposition']
+      let serverFilename
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          serverFilename = filenameMatch[1].replace(/['"]/g, '')
+        }
+      }
+
       // Handle file download
       const blob = new Blob([response.data])
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
 
-      if (files.length === 1) {
-        link.download = `converted.${outputFormat}`
+      // Prioritize server-provided filename, then fallback
+      if (serverFilename) {
+        link.download = serverFilename
+      } else if (files.length === 1) {
+        // Get original filename and replace its extension with the new format
+        const originalName = files[0].name
+        const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'))
+        link.download = `${nameWithoutExt}.${outputFormat}`
       } else {
-        link.download = 'converted-documents.zip'
+        // For multiple files, keep descriptive ZIP name
+        const timestamp = new Date().getTime()
+        link.download = `converted-documents-${timestamp}.zip`
       }
 
       document.body.appendChild(link)

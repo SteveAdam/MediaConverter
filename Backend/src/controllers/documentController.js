@@ -14,7 +14,7 @@ export const convertDocuments = async (req, res) => {
   const timestamp = Date.now()
 
   if (!files.length) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'No files uploaded',
       message: 'Please select at least one document to convert'
     })
@@ -27,9 +27,9 @@ export const convertDocuments = async (req, res) => {
   try {
     // Validate target format
     if (!config.supportedDocumentFormats.includes(targetExt)) {
-      return res.status(400).json({ 
-        error: 'Unsupported target format', 
-        message: `Supported formats: ${config.supportedDocumentFormats.join(', ')}` 
+      return res.status(400).json({
+        error: 'Unsupported target format',
+        message: `Supported formats: ${config.supportedDocumentFormats.join(', ')}`
       })
     }
 
@@ -57,10 +57,10 @@ export const convertDocuments = async (req, res) => {
 
     // If no files were processed successfully
     if (processed.length === 0) {
-      const errorMessage = failed.length > 0 
+      const errorMessage = failed.length > 0
         ? `All conversions failed. Errors: ${failed.map(f => `${f.filename}: ${f.error}`).join('; ')}`
         : 'No documents could be converted. Please check your files and try again.'
-      
+
       return res.status(422).json({
         error: 'Conversion failed',
         message: errorMessage,
@@ -76,7 +76,10 @@ export const convertDocuments = async (req, res) => {
     // Handle single file download
     if (processed.length === 1) {
       const { convertedPath, convertedName } = processed[0]
-      
+      const originalName = files[0].originalname
+      const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'))
+      const downloadName = `${nameWithoutExt}${targetExt}`
+
       // Send success response with warnings if applicable
       const responseData = {
         success: true,
@@ -86,8 +89,8 @@ export const convertDocuments = async (req, res) => {
       }
 
       res.setHeader('X-Conversion-Info', JSON.stringify(responseData))
-      
-      return res.download(convertedPath, convertedName, async (err) => {
+
+      return res.download(convertedPath, downloadName, async (err) => {
         if (err) console.error('Download error:', err)
         try {
           await cleanupFiles([...filesToCleanup, convertedPath])
@@ -97,8 +100,15 @@ export const convertDocuments = async (req, res) => {
       })
     } else {
       // Handle multiple files - create ZIP
-      const outputPaths = processed.map(p => p.convertedPath)
-      const zipPath = await createZipFile(outputPaths, `converted-documents-${timestamp}`, config.directories.downloads, processed)
+      const timestamp = Date.now()
+      const zipPath = await createZipFile(
+        processed.map(p => p.convertedPath),
+        `documents-${timestamp}`,
+        config.directories.downloads,
+        processed
+      )
+
+      const zipName = `documents-${timestamp}.zip`
 
       const responseData = {
         success: true,
@@ -109,12 +119,12 @@ export const convertDocuments = async (req, res) => {
 
       res.setHeader('X-Conversion-Info', JSON.stringify(responseData))
 
-      return res.download(zipPath, 'converted-documents.zip', async (err) => {
+      return res.download(zipPath, zipName, async (err) => {
         if (err) console.error('Download error:', err)
         try {
           await cleanupFiles([
             ...filesToCleanup,
-            ...outputPaths,
+            ...processed.map(p => p.convertedPath),
             zipPath
           ])
         } catch (e) {

@@ -80,7 +80,7 @@ function MediaConverter() {
         formData.append('resolution', resolution)
         formData.append('quality', quality)
         formData.append('downloadPlaylist', downloadPlaylist.toString())
-        
+
         if (playlistInfo?.isPlaylist && downloadPlaylist) {
           setProgress(`Downloading playlist (${playlistInfo.videoCount} videos)...`)
         } else {
@@ -106,16 +106,32 @@ function MediaConverter() {
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
-      
-      // Determine filename based on context
-      if (playlistInfo?.isPlaylist && downloadPlaylist) {
-        link.download = `playlist-${playlistInfo.title || 'download'}.zip`
-      } else if (playlistInfo?.isPlaylist && playlistInfo.videoCount > 1 && !downloadPlaylist) {
-        link.download = `batch-converted.zip`
-      } else {
-        link.download = `converted.${format}`
+
+      // Get filename from Content-Disposition header or use fallback
+      const contentDisposition = response.headers['content-disposition']
+      let filename
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : null
       }
-      
+
+      if (file) {
+        // Use original filename with new extension
+        const originalName = file.name
+        const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'))
+        link.download = `${nameWithoutExt}.${format}`
+      } else if (filename) {
+        // Use filename from server
+        link.download = filename
+      } else if (playlistInfo?.isPlaylist && downloadPlaylist) {
+        // Fallback for playlists
+        link.download = `${playlistInfo.title || 'playlist'}.zip`
+      } else {
+        // Fallback with timestamp
+        link.download = `media_${new Date().getTime()}.${format}`
+      }
+
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -129,7 +145,7 @@ function MediaConverter() {
       if (axios.isAxiosError(error)) {
         const errorMessage = error.response?.data?.message || 'An error occurred during conversion.'
         alert(`Error: ${errorMessage}`)
-        
+
         if (error.response?.data?.isPlaylist) {
           // Handle playlist confirmation
           const confirmDownload = window.confirm(
@@ -182,7 +198,7 @@ function MediaConverter() {
 
         <div className="max-w-2xl mx-auto">
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-8 shadow-2xl">
-            
+
             {/* URL Input Section */}
             <div className="mb-6">
               <label className="block text-sm font-semibold mb-3 text-purple-300">
@@ -202,7 +218,7 @@ function MediaConverter() {
                   </div>
                 )}
               </div>
-              
+
               {/* Playlist Info */}
               {playlistInfo && playlistInfo.isPlaylist && (
                 <div className="mt-4 p-4 bg-purple-900/30 border border-purple-500/30 rounded-xl">
@@ -337,7 +353,7 @@ function MediaConverter() {
                     <span className="text-sm text-purple-300">{progress}</span>
                   </div>
                   <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
-                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full animate-pulse" style={{width: '100%'}}></div>
+                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full animate-pulse" style={{ width: '100%' }}></div>
                   </div>
                 </div>
               </div>
@@ -358,7 +374,7 @@ function MediaConverter() {
                 <div className="flex items-center justify-center space-x-2">
                   <span>🚀</span>
                   <span>
-                    {playlistInfo?.isPlaylist && downloadPlaylist 
+                    {playlistInfo?.isPlaylist && downloadPlaylist
                       ? `Convert Playlist (${playlistInfo.videoCount} videos)`
                       : 'Convert Media'
                     }

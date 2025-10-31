@@ -11,8 +11,16 @@ const convertAsync = promisify(libre.convert)
 
 export const processDocumentConversion = async (file, targetExt, timestamp) => {
   const uploadPath = file.path
+  const sourceExt = path.extname(file.originalname).toLowerCase()
   
+
+  // Read file buffer before DOCX to PPTX check
   let inputBuffer
+  try {
+    inputBuffer = await fs.readFile(uploadPath)
+  } catch (err) {
+    throw new Error(`Failed to read uploaded file "${file.originalname}": ${err.message}`)
+  }
   // Special handling for DOCX to PPTX - attempt conversion with enhanced error handling
   if (sourceExt === '.docx' && targetExt === '.pptx') {
     console.log('Attempting DOCX to PPTX conversion...')
@@ -75,12 +83,6 @@ Conversion attempted: ${new Date().toISOString()}`
 
       return Buffer.from(fallbackContent, 'utf8')
     }
-  }
-
-  try {
-    inputBuffer = await fs.readFile(uploadPath)
-  } catch (err) {
-    throw new Error(`Failed to read uploaded file "${file.originalname}": ${err.message}`)
   }
 
   let converted
@@ -220,12 +222,12 @@ If you need this specific conversion, please use:
   try {
     // For all other conversions, use the standard method
     console.log(`Converting ${sourceExt} to ${targetExt} using LibreOffice...`)
-    
+
     const result = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Conversion timeout - LibreOffice took too long to respond'))
-      }, 30000) // 30 second timeout
-      
+        reject(new Error('Conversion timeout - LibreOffice took too long to respond (>60s)'))
+      }, 60000) // 60 second timeout (increased from 30s)
+
       libre.convert(inputBuffer, targetExt, undefined, (err, done) => {
         clearTimeout(timeout)
         if (err) {
@@ -237,11 +239,16 @@ If you need this specific conversion, please use:
         }
       })
     })
-    
+
     return result
-    
+
   } catch (libreError) {
     console.error(`LibreOffice conversion failed for ${file.originalname}:`, libreError.message)
+
+    // For timeout errors specifically, throw instead of returning error buffer
+    if (libreError.message.includes('timeout')) {
+      throw new Error(`Document conversion timed out. The file "${file.originalname}" is too large or complex. Please try a smaller file or split it into parts.`)
+    }
     
     // Instead of throwing an error, create an informative document
     const errorContent = `Conversion Failed

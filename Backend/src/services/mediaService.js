@@ -4,7 +4,6 @@ import fs from 'fs/promises'
 import path from 'path'
 import youtubeDl from 'youtube-dl-exec'
 import { config } from '../config/index.js'
-import { checkYtDlp, isPlaylist } from './youtubeService.js'
 
 // Set FFmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath)
@@ -13,14 +12,13 @@ export const processFileUpload = async (inputPath, format, resolution, quality, 
   const outputPath = path.join(config.directories.downloads, `converted-${timestamp}.${format}`)
 
   if (format === 'mp3') {
-    // Enhanced MP3 conversion
     await new Promise((resolve, reject) => {
       let ffmpegCommand = ffmpeg(inputPath)
         .audioBitrate(quality === 'high' ? 320 : quality === 'medium' ? 192 : 128)
         .audioCodec('mp3')
         .audioFrequency(44100)
         .format('mp3')
-        .audioFilters('volume=1.0') // Normalize volume
+        .audioFilters('volume=1.0')
 
       ffmpegCommand
         .save(outputPath)
@@ -28,7 +26,6 @@ export const processFileUpload = async (inputPath, format, resolution, quality, 
         .on('error', reject)
     })
   } else if (format === 'mp4') {
-    // Enhanced MP4 conversion
     const resHeight = resolution.replace('p', '')
     await new Promise((resolve, reject) => {
       let ffmpegCommand = ffmpeg(inputPath)
@@ -52,72 +49,132 @@ export const processFileUpload = async (inputPath, format, resolution, quality, 
     })
   }
 
-  console.log('Enhanced file conversion completed:', outputPath)
+  console.log('File conversion completed:', outputPath)
   return outputPath
 }
 
 export const processYouTubeUrl = async (url, format, resolution, quality, downloadPlaylist, timestamp) => {
-  const ytdlpAvailable = await checkYtDlp()
-  if (!ytdlpAvailable) {
-    throw new Error('yt-dlp is not installed. Please install yt-dlp: pip install yt-dlp')
+  console.log('=== YouTube Download (yt-dlp) ===')
+  console.log('URL:', url)
+  console.log('Format:', format, '| Resolution:', resolution, '| Quality:', quality)
+  console.log('Playlist:', downloadPlaylist)
+
+  // Ensure downloads directory exists
+  try {
+    await fs.access(config.directories.downloads)
+  } catch (err) {
+    await fs.mkdir(config.directories.downloads, { recursive: true })
   }
 
-  const isPlaylistUrl = isPlaylist(url)
-
-  if (isPlaylistUrl && !downloadPlaylist) {
-    throw new Error('Playlist detected. This URL contains a playlist. Please confirm if you want to download the entire playlist.')
-  }
-
-  let options = {
-    noWarnings: true,
-    output: path.join(config.directories.downloads, `youtube-${timestamp}-%(title)s.%(ext)s`),
-    restrictFilenames: true
-  }
-
-  // Handle playlist settings correctly
-  if (downloadPlaylist && isPlaylistUrl) {
-    // Download entire playlist
-    options.yesPlaylist = true
-  } else {
-    // Download only single video (even if URL contains playlist)
-    options.noPlaylist = true
-  }
-
-  if (format === 'mp3') {
-    options.extractAudio = true
-    options.audioFormat = 'mp3'
-    options.audioQuality = quality === 'high' ? '320K' : quality === 'medium' ? '192K' : '128K'
-    options.embedSubs = false
-  } else if (format === 'mp4') {
-    const resHeight = resolution.replace('p', '')
-    // Enhanced video quality options
-    if (quality === 'high') {
-      options.format = `best[height<=${resHeight}][ext=mp4]/bestvideo[height<=${resHeight}]+bestaudio[ext=m4a]/best[height<=${resHeight}]`
-    } else if (quality === 'medium') {
-      options.format = `best[height<=${resHeight}]/bestvideo[height<=${resHeight}]+bestaudio/best`
-    } else {
-      options.format = `worst[height<=${resHeight}]/worst`
+  try {
+    if (format === 'mp3') {
+      // Download audio only
+      return await downloadAudioOnly(url, quality, timestamp, downloadPlaylist)
+    } else if (format === 'mp4') {
+      // Download video with audio
+      return await downloadVideoWithAudio(url, resolution, quality, timestamp, downloadPlaylist)
     }
-    options.mergeOutputFormat = 'mp4'
-    options.embedSubs = false
+  } catch (error) {
+    console.error('YouTube download error:', error)
+
+    const errorMsg = error.message || error.stderr || String(error)
+
+    if (errorMsg.includes('Sign in') || errorMsg.includes('age')) {
+      throw new Error('This video requires sign-in or is age-restricted.')
+    } else if (errorMsg.includes('private') || errorMsg.includes('Private')) {
+      throw new Error('This is a private video and cannot be downloaded.')
+    } else if (errorMsg.includes('not available') || errorMsg.includes('Video unavailable')) {
+      throw new Error('This video is not available. It may be deleted, geo-restricted, or require YouTube Premium.')
+    } else if (errorMsg.includes('Requested format is not available')) {
+      throw new Error('Unable to download this video in the requested quality. YouTube may have changed their format.')
+    } else {
+      throw new Error(`YouTube download failed: ${errorMsg}`)
+    }
   }
+}
 
-  console.log('Downloading with yt-dlp... Options:', options)
-  await youtubeDl(url, options)
+async function downloadAudioOnly(url, quality, timestamp, downloadPlaylist) {
+  // Force mp3 extension in output template
+  const outputTemplate = path.join(config.directories.downloads, `yt_${timestamp}_%(title)s.mp3`)
 
-  // Find downloaded files
-  const files = await fs.readdir(config.directories.downloads)
-  const downloadedFiles = files.filter(file =>
-    file.startsWith(`youtube-${timestamp}`) &&
-    (file.endsWith('.mp3') || file.endsWith('.mp4'))
-  )
+  // Normalize path for cross-platform compatibility
+  const normalizedTemplate = outputTemplate.replace(/\\/g, '/')
 
-  if (downloadedFiles.length === 0) {
-    throw new Error('No files were downloaded')
+  const audioBitrate = quality === 'high' ? '320' : quality === 'medium' ? '192' : '128'
+
+  console.log('Downloading audio with yt-dlp...')
+
+  try {
+    await youtubeDl(url, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      audioQuality: 0,
+      output: normalizedTemplate,
+      restrictFilenames: true,
+      noPlaylist: !downloadPlaylist,
+      postprocessorArgs: `ffmpeg:-b:a ${audioBitrate}k`,
+      // Tell yt-dlp where ffmpeg is
+      ffmpegLocation: ffmpegPath
+    })
+
+    // Find the downloaded file
+    const files = await fs.readdir(config.directories.downloads)
+    const downloadedFiles = files.filter(f =>
+      f.startsWith(`yt_${timestamp}_`) && f.endsWith('.mp3')
+    )
+
+    if (downloadedFiles.length === 0) {
+      throw new Error('Download completed but file not found')
+    }
+
+    const fullPaths = downloadedFiles.map(f => path.join(config.directories.downloads, f))
+    console.log(`✓ Audio downloaded: ${downloadedFiles.join(', ')}`)
+    return fullPaths
+  } catch (error) {
+    console.error('yt-dlp audio download error:', error)
+    throw new Error(`Audio download failed: ${error.message || error.stderr || String(error)}`)
   }
+}
 
-  const outputPaths = downloadedFiles.map(file => path.join(config.directories.downloads, file))
-  console.log('YouTube download completed. Files:', downloadedFiles.length)
+async function downloadVideoWithAudio(url, resolution, quality, timestamp, downloadPlaylist) {
+  // Use yt-dlp's template syntax without forcing extension
+  const outputTemplate = path.join(config.directories.downloads, `yt_${timestamp}_%(title)s.%(ext)s`)
 
-  return outputPaths
+  // Normalize path for cross-platform compatibility
+  const normalizedTemplate = outputTemplate.replace(/\\/g, '/')
+
+  const resHeight = resolution.replace('p', '')
+
+  console.log(`Downloading video at max ${resHeight}p with yt-dlp...`)
+
+  try {
+    // Simple approach: specify the format filter and let yt-dlp handle merging
+    // -S res:720 sorts by resolution, preferring 720p or lower
+    await youtubeDl(url, {
+      format: `bv*[height<=${resHeight}]+ba/b[height<=${resHeight}]`,
+      output: normalizedTemplate,
+      restrictFilenames: true,
+      noPlaylist: !downloadPlaylist,
+      mergeOutputFormat: 'mp4',
+      // Tell yt-dlp where ffmpeg is
+      ffmpegLocation: ffmpegPath
+    })
+
+    // Find the downloaded file - it should be mp4 after merging
+    const files = await fs.readdir(config.directories.downloads)
+    const downloadedFiles = files.filter(f =>
+      f.startsWith(`yt_${timestamp}_`) && (f.endsWith('.mp4') || f.endsWith('.mkv') || f.endsWith('.webm'))
+    )
+
+    if (downloadedFiles.length === 0) {
+      throw new Error('Download completed but file not found')
+    }
+
+    const fullPaths = downloadedFiles.map(f => path.join(config.directories.downloads, f))
+    console.log(`✓ Video downloaded: ${downloadedFiles.join(', ')}`)
+    return fullPaths
+  } catch (error) {
+    console.error('yt-dlp video download error:', error)
+    throw new Error(`Video download failed: ${error.message || error.stderr || String(error)}`)
+  }
 }
