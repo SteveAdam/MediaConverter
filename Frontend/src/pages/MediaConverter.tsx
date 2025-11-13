@@ -60,6 +60,7 @@ function MediaConverter() {
     return null
   }
 
+  // Handle file input changes
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const selectedFile = event.target.files[0]
@@ -75,7 +76,8 @@ function MediaConverter() {
       }
     }
   }
-
+  
+// Handle URL input changes
   const handleUrlChange = (value: string) => {
     setUrl(value)
     setFilePreview(null)
