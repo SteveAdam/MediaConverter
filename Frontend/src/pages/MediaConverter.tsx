@@ -6,6 +6,9 @@ interface PlaylistInfo {
   isPlaylist: boolean
   videoCount: number
   title?: string
+  duration?: number
+  uploader?: string
+  thumbnail?: string
   videos?: Array<{
     title: string
     duration: number
@@ -107,10 +110,36 @@ function MediaConverter() {
         url: urlValue.trim()
       })
       setPlaylistInfo(response.data)
+
+      // Update video info with actual title for single videos
+      if (!response.data.isPlaylist && response.data.title) {
+        const videoId = extractYouTubeVideoId(urlValue)
+        if (videoId) {
+          setVideoInfo({
+            videoId,
+            title: response.data.title,
+            thumbnail: response.data.thumbnail || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+            duration: formatDuration(response.data.duration)
+          })
+        }
+      }
     } catch (error) {
       console.error('Error checking playlist:', error)
       setPlaylistInfo(null)
     }
+  }
+
+  const formatDuration = (seconds?: number): string | undefined => {
+    if (!seconds) return undefined
+
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
   const handleConvert = async () => {
