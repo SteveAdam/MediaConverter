@@ -123,11 +123,20 @@ export const getPlaylistInfo = async (req, res) => {
   }
 
   try {
-    if (!isPlaylist(url)) {
+    const isPlaylistUrl = isPlaylist(url)
+
+    if (!isPlaylistUrl) {
+      // Get single video info
+      const videoInfo = await getPlaylistInfoService(url)
+      const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo
+
       return res.json({
         isPlaylist: false,
         videoCount: 1,
-        message: 'This is a single video, not a playlist'
+        title: video.title || 'YouTube Video',
+        duration: video.duration,
+        uploader: video.uploader,
+        thumbnail: video.thumbnail
       })
     }
 
