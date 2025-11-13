@@ -66,6 +66,26 @@ export const convertImages = async (req, res) => {
       const outputPath = outputPaths[0]
       const fileName = path.basename(outputPath)
 
+      // Set explicit Content-Type header based on image format
+      const fileExtension = path.extname(outputPath).toLowerCase()
+      const imageMimeTypes = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.avif': 'image/avif',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff',
+        '.bmp': 'image/bmp',
+        '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml'
+      }
+
+      const contentType = imageMimeTypes[fileExtension] || 'image/jpeg'
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`)
+
       res.download(outputPath, fileName, async (err) => {
         if (err) console.error('Download error:', err)
 
@@ -79,6 +99,9 @@ export const convertImages = async (req, res) => {
     } else {
       // Multiple files - create ZIP
       const zipPath = await createZipFile(outputPaths, `converted-images-${timestamp}`, config.directories.downloads)
+
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', 'attachment; filename="converted-images.zip"')
 
       res.download(zipPath, 'converted-images.zip', async (err) => {
         if (err) console.error('Download error:', err)

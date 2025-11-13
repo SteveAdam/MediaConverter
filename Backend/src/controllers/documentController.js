@@ -88,6 +88,23 @@ export const convertDocuments = async (req, res) => {
         ...(failed.length > 0 && { failures: failed })
       }
 
+      // Set explicit Content-Type header for better file recognition
+      const mimeTypes = {
+        '.pdf': 'application/pdf',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.doc': 'application/msword',
+        '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        '.ppt': 'application/vnd.ms-powerpoint',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.xls': 'application/vnd.ms-excel',
+        '.txt': 'text/plain',
+        '.rtf': 'application/rtf',
+        '.odt': 'application/vnd.oasis.opendocument.text'
+      }
+
+      const contentType = mimeTypes[targetExt] || 'application/octet-stream'
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadName)}"`)
       res.setHeader('X-Conversion-Info', JSON.stringify(responseData))
 
       return res.download(convertedPath, downloadName, async (err) => {
@@ -117,6 +134,8 @@ export const convertDocuments = async (req, res) => {
         ...(failed.length > 0 && { failures: failed })
       }
 
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`)
       res.setHeader('X-Conversion-Info', JSON.stringify(responseData))
 
       return res.download(zipPath, zipName, async (err) => {
