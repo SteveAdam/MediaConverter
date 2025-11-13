@@ -39,11 +39,28 @@ app.use(helmet({
 }))
 
 // CORS configuration
+// Allow multiple origins for development and production
+const allowedOrigins = [
+  'http://localhost:5173',  // Local development
+  'http://localhost:5000',  // Local backend testing
+  process.env.CORS_ORIGIN   // Production frontend URL from environment
+].filter(Boolean) // Remove undefined values
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true)
+
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   exposedHeaders: ['Content-Disposition'], // Allow frontend to read filename from response
+  credentials: true
 }))
 
 app.use(express.json())
