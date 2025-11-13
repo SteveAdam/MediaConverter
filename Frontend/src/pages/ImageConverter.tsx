@@ -430,7 +430,7 @@ function ImageConverter() {
                     </div>
 
                     {/* Features Info */}
-                    <div className="mt-8 grid md:grid-cols-4 gap-4">
+                    {/* <div className="mt-8 grid md:grid-cols-4 gap-4">
                         <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
                             <div className="text-3xl mb-3">🌐</div>
                             <h3 className="font-semibold text-emerald-300 mb-2">Modern Formats</h3>
@@ -451,7 +451,7 @@ function ImageConverter() {
                             <h3 className="font-semibold text-emerald-300 mb-2">Quality Control</h3>
                             <p className="text-sm text-gray-400">Fine-tune compression and quality settings</p>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Supported Formats Info */}
                     <div className="mt-6 bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
