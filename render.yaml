@@ -1,0 +1,40 @@
+# Render deployment configuration
+# This file defines how to deploy both backend and frontend on Render
+
+services:
+  # Backend API Service
+  - type: web
+    name: mediaconverter-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      cd Backend
+      npm install
+      apt-get update && apt-get install -y ffmpeg python3 python3-pip
+      pip3 install -U yt-dlp
+    startCommand: cd Backend && node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+  # Frontend Static Site
+  - type: web
+    name: mediaconverter-frontend
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: cd Frontend && npm install && npm run build
+    staticPublishPath: Frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://mediaconverter-backend.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    autoDeploy: true
