@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import apiUrls from '../apiurls'
 
@@ -13,6 +13,13 @@ interface PlaylistInfo {
   }>
 }
 
+interface VideoInfo {
+  videoId: string
+  title: string
+  thumbnail: string
+  duration?: string
+}
+
 function MediaConverter() {
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -23,22 +30,72 @@ function MediaConverter() {
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistInfo | null>(null)
   const [downloadPlaylist, setDownloadPlaylist] = useState(false)
   const [progress, setProgress] = useState('')
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
+
+  // Cleanup file preview URL on unmount or when preview changes
+  useEffect(() => {
+    return () => {
+      if (filePreview) {
+        URL.revokeObjectURL(filePreview)
+      }
+    }
+  }, [filePreview])
+
+  const extractYouTubeVideoId = (url: string): string | null => {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /youtube\.com\/shorts\/([^&\n?#]+)/
+    ]
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return match[1]
+      }
+    }
+    return null
+  }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      setFile(event.target.files[0])
+      const selectedFile = event.target.files[0]
+      setFile(selectedFile)
       setUrl('')
       setPlaylistInfo(null)
+      setVideoInfo(null)
+
+      // Create preview for video/audio files
+      if (selectedFile.type.startsWith('video/') || selectedFile.type.startsWith('audio/')) {
+        const previewUrl = URL.createObjectURL(selectedFile)
+        setFilePreview(previewUrl)
+      }
     }
   }
 
   const handleUrlChange = (value: string) => {
     setUrl(value)
+    setFilePreview(null)
+
     if (value.trim()) {
       setFile(null)
       setPlaylistInfo(null)
       setDownloadPlaylist(false)
       checkPlaylist(value)
+
+      // Extract video info for preview
+      const videoId = extractYouTubeVideoId(value)
+      if (videoId) {
+        setVideoInfo({
+          videoId,
+          title: 'YouTube Video',
+          thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
+        })
+      } else {
+        setVideoInfo(null)
+      }
+    } else {
+      setVideoInfo(null)
     }
   }
 
@@ -272,6 +329,75 @@ function MediaConverter() {
               )}
             </div>
 
+            {/* Media Preview Section */}
+            {(videoInfo || filePreview) && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold mb-3 text-purple-300">📺 Preview</h3>
+                <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-4">
+                  {/* YouTube Video Preview */}
+                  {videoInfo && !playlistInfo?.isPlaylist && (
+                    <div className="flex items-start space-x-4">
+                      <img
+                        src={videoInfo.thumbnail}
+                        alt="Video thumbnail"
+                        className="w-40 h-auto rounded-lg border-2 border-purple-500/30"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white mb-2">{videoInfo.title}</p>
+                        <div className="flex items-center space-x-3 text-xs text-gray-400">
+                          <span className="flex items-center">
+                            <span className="text-red-500 mr-1">🎥</span>
+                            YouTube Video
+                          </span>
+                          {videoInfo.duration && (
+                            <span className="flex items-center">
+                              <span className="mr-1">⏱️</span>
+                              {videoInfo.duration}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Uploaded File Preview */}
+                  {filePreview && file && (
+                    <div className="space-y-3">
+                      {file.type.startsWith('video/') && (
+                        <video
+                          src={filePreview}
+                          controls
+                          className="w-full rounded-lg border-2 border-purple-500/30"
+                          style={{ maxHeight: '300px' }}
+                        >
+                          Your browser does not support the video tag.
+                        </video>
+                      )}
+                      {file.type.startsWith('audio/') && (
+                        <audio
+                          src={filePreview}
+                          controls
+                          className="w-full"
+                        >
+                          Your browser does not support the audio tag.
+                        </audio>
+                      )}
+                      <div className="flex items-center space-x-3 text-xs text-gray-400">
+                        <span className="flex items-center">
+                          <span className="mr-1">{file.type.startsWith('video/') ? '🎬' : '🎵'}</span>
+                          {file.type.startsWith('video/') ? 'Video File' : 'Audio File'}
+                        </span>
+                        <span className="flex items-center">
+                          <span className="mr-1">💾</span>
+                          {(file.size / (1024 * 1024)).toFixed(2)} MB
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Format Selection */}
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <div>
@@ -419,25 +545,6 @@ function MediaConverter() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Additional Features Info */}
-          <div className="mt-8 grid md:grid-cols-3 gap-4">
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-              <div className="text-3xl mb-3">⚡</div>
-              <h3 className="font-semibold text-purple-300 mb-2">Lightning Fast</h3>
-              <p className="text-sm text-gray-400">Optimized processing with parallel conversion</p>
-            </div>
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-              <div className="text-3xl mb-3">🔒</div>
-              <h3 className="font-semibold text-purple-300 mb-2">Secure & Private</h3>
-              <p className="text-sm text-gray-400">Files are automatically deleted after download</p>
-            </div>
-            <div className="bg-gray-800/30 backdrop-blur-sm border border-gray-700 rounded-xl p-6 text-center">
-              <div className="text-3xl mb-3">📱</div>
-              <h3 className="font-semibold text-purple-300 mb-2">Multi-Platform</h3>
-              <p className="text-sm text-gray-400">Works on all devices and operating systems</p>
-            </div>
           </div>
         </div>
       </div>
