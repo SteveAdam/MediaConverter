@@ -60,6 +60,24 @@ export const convertMedia = async (req, res) => {
         downloadName = basename
       }
 
+      // Set explicit Content-Type header based on file extension
+      // This ensures mobile devices recognize files as shareable media
+      const fileExtension = path.extname(outputPath).toLowerCase()
+      let contentType = 'application/octet-stream'
+
+      if (fileExtension === '.mp4') {
+        contentType = 'video/mp4'
+      } else if (fileExtension === '.mp3') {
+        contentType = 'audio/mpeg'
+      } else if (fileExtension === '.webm') {
+        contentType = 'video/webm'
+      } else if (fileExtension === '.m4a') {
+        contentType = 'audio/mp4'
+      }
+
+      res.setHeader('Content-Type', contentType)
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(downloadName)}"`)
+
       res.download(outputPath, downloadName, async (err) => {
         if (err) console.error('Download error:', err)
         const filesToClean = [inputPath, ...outputPaths].filter(Boolean)
@@ -68,7 +86,10 @@ export const convertMedia = async (req, res) => {
     } else {
       // Multiple files - create ZIP
       const zipPath = await createZipFile(outputPaths, `converted-media-${timestamp}`, config.directories.downloads)
-      
+
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', 'attachment; filename="converted-media.zip"')
+
       res.download(zipPath, 'converted-media.zip', async (err) => {
         if (err) console.error('Download error:', err)
         const allFiles = [inputPath, ...outputPaths, zipPath].filter(Boolean)
